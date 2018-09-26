@@ -18,13 +18,236 @@ import stat
 # If modifying these scopes, delete the file token.json.
 SCOPES = 'https://www.googleapis.com/auth/gmail.modify'
 
+class GmailHelper():
+    """The GmailHelper object implements defining and apply rules for
+    managing messages in a Gmail account.
+
+    This requires using a token in file token.json with a valid
+    token key to establish access to a gmail service.
+
+    Attributes:
+        service (object): the gmail service
+    """
+
+    persist = False
+
+    def __init__(self, persisters={}):
+        """Initializes the GmailHelper object
+        """
+        if persisters:
+            self.persist = True
+            self.config_persister = persisters['config']
+            self.rules_persister = persisters['rules']
+            self.cache_persister = persisters['cache']
+        store = file.Storage('token.json')
+        creds = store.get()
+        if not creds or creds.invalid:
+            flow = client.flow_from_clientsecrets('credentials.json', SCOPES)
+            creds = tools.run_flow(flow, store)
+        self.service = build('gmail', 'v1', http=creds.authorize(Http()))
+
+    def ask_for_sender_rules(self, full_address=False):
+        """Asks the user to specify rules for handling Gmail messages.
+        """
+        messages = self.collect_messages_list()
+        cache_maxage = self.config_persister.get()['cache_maxage']
+        age = self.cache_persister.file_age_in_seconds()
+        print("The cache is " + str(age) + " seconds old.")
+        if age > cache_maxage:
+            self.cache_persister.delete()
+            print("Deleting cache.")
+        cache = self.cache_persister.get()
+        if full_address:
+            print("FULL ADDRESS")
+            sorted_counts = cache['sorted_address_counts']
+        else:
+            sorted_counts = cache['sorted_domain_counts']
+        if len(sorted_counts) == 0:
+            sender_counts = defaultdict(int)
+            count = 1
+            limit = self.config_persister.get()['limit']
+            for message in messages:
+                sender = self.get_from_sender(message, full_address=full_address)
+                if sender:
+                    sender_counts[sender] += 1
+                count += 1
+                if count % 100 == 0:
+                    print(str(count) + " messages inspected.")
+                if limit > 0 and count > limit:
+                    break
+            sorted_counts = sorted(sender_counts.iteritems(),
+                                   key=lambda (k,v): (v,k),
+                                   reverse=True)
+            if full_address:
+                cache['sorted_address_counts'] = sorted_counts
+            else:
+                cache['sorted_domain_counts'] = sorted_counts
+            self.cache_persister.set(cache)
+
+        print("""For each sender, tell me how you want it handled, as follows:
+  * Enter [return] if you want it tagged with its sender.
+  * Enter a word or phrase if you want it tagged with that word or phrase.
+  * Enter SKIP if you don't want to do anything.
+  * Enter END if you don't want to do anything with this sender
+    or any subsequent senders in the list.
+  * Enter CANCEL to cancel all of the processing you've specified.
+
+OK? Let's get started...""")
+        rules = self.rules_persister.get()
+        for count_item in sorted_counts:
+            (sender, count) = count_item
+            print("sender " + sender + " has " + str(count) + " messages.")
+            handling = raw_input("How do you want it handled? ")
+            if handling.lower() == "cancel":
+                print("Your will be done, my liege. I will do nothing.")
+                break
+            elif handling.lower() == "end":
+                self.rules_persister.set(rules)
+                print("Sounds like a plan, Stan. Let me get to work.")
+                break
+            elif handling.lower() == "skip":
+                print("Gotcha. OK, let's look at the next one.")
+            elif handling == "":
+                print("OK, we'll tag all of these emails with \"" + sender + "\".")
+                rule = get_email_rule(sender, rules)
+                rule['add_tags'].append(sender)
+                set_email_rule(sender, rule, rules)
+            else:
+                rule = get_email_rule(sender, rules)
+                rule['add_tags'][handling.lower()] = handling
+                set_email_rule(sender, rule, rules)
+                print("OK, we'll tag all of these emails with \"" + handling + "\".")
+
+    def collect_messages_list(self):
+        # messages=ListMessagesMatchingQuery(service, 'me', query='label:INBOX is:unread')
+        messages=ListMessagesMatchingQuery(self.service, 'me', query='label:INBOX')
+        if not messages:
+            print('No messages found.')
+        else:
+            message_count = len(messages)
+            print(str(message_count) + ' Messages:')
+        return messages
+
+    def define_rule_tags(self):
+        """Applies user-specified rules to emails in the inbox.
+        """
+        rules = self.rules_persister.get()
+        try:
+            response = self.service.users().labels().list(userId='me').execute()
+            labels = response['labels']
+            label_tags = [l.get('name').lower() for l in labels]
+        except errors.HttpError, error:
+            print('An error occurred: %s' % error)
+        for sender in rules.keys():
+            # print("sender " + sender + " has the following tags:")
+            for key in rules[sender]['add_tags'].keys():
+                # print("* " + tag)
+                if not key.lower() in label_tags:
+                    label = MakeLabel(rules[sender]['add_tags'][key])
+                    CreateLabel(self.service, 'me', label)
+
+    def tag_messages(self, messages):
+        print("Filing messages. This may take awhile...")
+        limit = self.config_persister.get()['limit']
+        api = self.service.users().messages()
+        response = self.service.users().labels().list(userId='me').execute()
+        labels = response['labels']
+        label_map = {l.get('name').lower(): l.get('id') for l in labels}
+        rules = self.rules_persister.get()
+        count = 1
+        for message in messages:
+            domain = self.get_from_sender(message, False)
+            email = self.get_from_sender(message, True)
+            for sender in [domain,email]:
+                rule = get_email_rule(sender, rules)
+                if len(rule['add_tags'].keys()) > 0:
+                    add_rule = [label_map[key] for key in rule['add_tags'].keys()]
+                    request_body = {'addLabelIds': add_rule,
+                                    'removeLabelIds': ['INBOX']}
+                    message = api.modify(userId='me', id=message['id'],
+                                         body=request_body).execute()
+            count += 1
+            if count % 100 == 0:
+                print(str(count) + " messages processed.")
+            if limit != 0 and count > limit:
+                exit()
+
+    def get_from_sender(self, message, full_address=False):
+        api = self.service.users().messages()
+        mess = api.get(userId='me', id=message['id'], format='metadata').execute()
+        headers = mess['payload']['headers']
+        temp_dict = {}
+        for header in headers:
+            # if header['name'] == 'Subject':
+            #     temp_dict['Subject'] = header['value']
+            # elif header['name'] == 'Date':
+            #     msg_date = header['value']
+            #     date_parse = (parser.parse(msg_date))
+            #     temp_dict['Date'] = str(date_parse.date())
+            if header['name'] == 'From':
+                temp_dict['From'] = header['value']
+        if 'From' in temp_dict:
+            (name, email_address) = parseaddr(temp_dict['From'])
+            if full_address:
+                return email_address
+            else:
+                (username, domain) = parse("{}@{}", email_address)
+                return domain
+            return sender.lower()
+        else:
+            return False
+
+
+class JsonFilePersister():
+    """The Persister class implements getting and setting persistent
+    attributes saved in a Json file.
+    """
+
+    def __init__(self, name, default_value = {}):
+        """Initializes the JsonFilePersister object
+        """
+        self.name = name
+        self.default_value = default_value
+
+    def get(self):
+        """Retrieves info settings from file self.name + '.json'.
+        """
+        try:
+            with open(self.name + '.json') as json_file:
+                return json.load(json_file)
+        except IOError:
+            return self.default_value
+
+
+    def set(self, value):
+        """Saves configuration settings to file config.json."""
+        with open(self.name + '.json', 'w') as outfile:
+            json.dump(value, outfile)
+
+
+    def delete(self):
+        ## If file exists, delete it ##
+        if os.path.isfile(self.name + '.json'):
+            os.remove(self.name + '.json')
+
+    def file_age_in_seconds(self):
+        if os.path.isfile(self.name + '.json'):
+            return time.time() - os.stat(self.name + '.json')[stat.ST_MTIME]
+        return 0
+
+
 def main():
-    store = file.Storage('token.json')
-    creds = store.get()
-    if not creds or creds.invalid:
-        flow = client.flow_from_clientsecrets('credentials.json', SCOPES)
-        creds = tools.run_flow(flow, store)
-    service = build('gmail', 'v1', http=creds.authorize(Http()))
+    persisters = {}
+    persisters['config'] = JsonFilePersister('config',
+                                             {'limit': 0,
+                                              'cache_maxage': 60 * 60 * 6})
+    persisters['rules'] = JsonFilePersister('rules', {})
+    persisters['cache'] = JsonFilePersister('cache',
+                                            {'sorted_domain_counts': [],
+                                             'sorted_address_counts': []})
+
+    gmail_helper = GmailHelper(persisters)
+    service = gmail_helper.service
 
     print("I can do several things:")
     print("* Define new email rules based on sender domains (domains)")
@@ -35,17 +258,17 @@ def main():
     print("* Set the number of seconds to cache sender counts (cache)")
     handling = raw_input("What would you like me to do? ")
     if "domains" in handling.lower():
-        ask_for_sender_rules(service, full_address=False)
+        gmail_helper.ask_for_sender_rules(full_address=False)
     elif "addresses" in handling.lower():
-        ask_for_sender_rules(service, full_address=True)
+        gmail_helper.ask_for_sender_rules(full_address=True)
     elif "apply" in handling.lower():
-        messages = collect_messages_list(service)
-        define_rule_tags(service)
-        tag_messages(messages, service)
+        messages = gmail_helper.collect_messages_list()
+        gmail_helper.define_rule_tags()
+        gmail_helper.tag_messages(messages)
     elif "backup" in handling.lower():
         backup_rules()
     elif "limit" in handling.lower():
-        config = get_config()
+        config = gmail_helper.config_persister.get()
         print("Limit was previously " + str(config['limit']) + ".")
         m = re.search(r'(\d*)\s*$',handling.lower())
         limit = m.group(0)
@@ -53,10 +276,10 @@ def main():
             config['limit'] = 0
         else:
             config['limit'] = int(limit)
-        set_config(config)
+        gmail_helper.config_persister.set(config)
         print("I've changed the limit to " + str(config['limit']) + ".")
     elif "cache" in handling.lower():
-        config = get_config()
+        config = gmail_helper.config_persister.get()
         print("Cache was previously " + str(config['cache_maxage']) + " seconds.")
         m = re.search(r'(\d*)\s*$',handling.lower())
         cache = m.group(0)
@@ -64,251 +287,13 @@ def main():
             config['cache_maxage'] = 0
         else:
             config['cache_maxage'] = int(cache)
-        set_config(config)
+        gmail_helper.config_persister.set(config)
         print("I've set caching to " + str(config['cache_maxage']) + " seconds.")
 
 
 def backup_rules():
     copyfile("rules.json", "rules.json.backup")
     copyfile("config.json", "config.json.backup")
-
-
-def get_config():
-    """Retrieves configuration settings from file config.json.
-    Settings include:
-    * limit (int): the maximum of messages to process
-    """
-    try:
-        with open('config.json') as json_file:
-            config = json.load(json_file)
-            return config
-    except IOError:
-        # Default caching is 6 hours.
-        return {'limit': 0, 'cache_maxage': 60 * 60 * 6}
-
-
-def set_config(config):
-    """Saves configuration settings to file config.json."""
-    with open('config.json', 'w') as outfile:
-        json.dump(config, outfile)
-
-
-def file_age_in_seconds(pathname):
-    return time.time() - os.stat(pathname)[stat.ST_MTIME]
-
-
-def get_cache():
-    """Retrieves temporarily stored values from file cache.json.
-    Cached values include:
-    * sorted_counts (dict): a count of the number of messages per sender
-    """
-    cache_maxage = get_config()['cache_maxage']
-    try:
-        with open('cache.json') as json_file:
-            cache = json.load(json_file)
-    except IOError:
-        return {'sorted_domain_counts': [], 'sorted_address_counts': []}
-    age = file_age_in_seconds('cache.json')
-    print("The cache is " + str(age) + " seconds old.")
-    if age < cache_maxage:
-        return cache
-    else:
-        return {'sorted_domain_counts': [], 'sorted_address_counts': []}
-
-
-def set_cache(cache):
-    """Saves configuration settings to file config.json."""
-    with open('cache.json', 'w') as outfile:
-        json.dump(cache, outfile)
-
-
-def get_email_rules():
-    """Retrieves email rules from file rules.json."""
-    try:
-        with open('rules.json') as json_file:
-            rules = json.load(json_file)
-            return rules
-    except IOError:
-        return {}
-
-
-def set_email_rules(rules):
-    """Saves email rules to file rules.json."""
-    with open('rules.json', 'w') as outfile:
-        json.dump(rules, outfile)
-
-
-def dedupe_rule(rule):
-    adds = rule['add_tags']
-    new_adds = {tag.lower(): tag for tag in adds}
-    return {'add_tags': new_adds, 'remove_tags': {}, 'set_status': {}}
-
-
-def collect_messages_list(service):
-    # messages=ListMessagesMatchingQuery(service, 'me', query='label:INBOX is:unread')
-    messages=ListMessagesMatchingQuery(service, 'me', query='label:INBOX')
-    if not messages:
-        print('No messages found.')
-    else:
-        message_count = len(messages)
-        print(str(message_count) + ' Messages:')
-    return messages
-
-
-def ask_for_sender_rules(service, full_address=False):
-    """Asks the user to specify rules for handling Gmail messages.
-    """
-    messages = collect_messages_list(service)
-    cache = get_cache()
-    # pprint.pprint(cache)
-    if full_address:
-        print("FULL ADDRESS")
-        sorted_counts = cache['sorted_address_counts']
-    else:
-        sorted_counts = cache['sorted_domain_counts']
-    # pprint.pprint(sorted_counts)
-    if len(sorted_counts) == 0:
-        sender_counts = defaultdict(int)
-        count = 1
-        limit = get_config()['limit']
-        for message in messages:
-            sender = get_from_sender(message, service, full_address=full_address)
-            if sender:
-                sender_counts[sender] += 1
-            count += 1
-            if limit == 0 or count > limit:
-                break
-        sorted_counts = sorted(sender_counts.iteritems(),
-                               key=lambda (k,v): (v,k),
-                               reverse=True)
-        if full_address:
-            cache['sorted_address_counts'] = sorted_counts
-        else:
-            cache['sorted_domain_counts'] = sorted_counts
-        set_cache(cache)
-
-    print("""For each sender, tell me how you want it handled, as follows:
-  * Enter [return] if you want it tagged with its sender.
-  * Enter a word or phrase if you want it tagged with that word or phrase.
-  * Enter SKIP (in all caps) if you don't want to do anything.
-  * Enter END (in all caps) if you don't want to do anything with this sender
-    or any subsequent senders in the list.
-  * Enter CANCEL (all caps) to cancel all of the processing you've specified.
-
-OK? Let's get started...""")
-    rules = get_email_rules()
-    for count_item in sorted_counts:
-        (sender, count) = count_item
-        print("sender " + sender + " has " + str(count) + " messages.")
-        handling = raw_input("How do you want it handled? ")
-        if handling.lower() == "cancel":
-            print("Your will be done, my liege. I will do nothing.")
-            break
-        elif handling.lower() == "end":
-            set_email_rules(rules)
-            print("Sounds like a plan, Stan. Let me get to work.")
-            break
-        elif handling.lower() == "skip":
-            print("Gotcha. OK, let's look at the next one.")
-        elif handling == "":
-            print("OK, we'll tag all of these emails with \"" + sender + "\".")
-            rule = get_email_rule(sender, rules)
-            rule['add_tags'].append(sender)
-            set_email_rule(sender, rule, rules)
-        else:
-            rule = get_email_rule(sender, rules)
-            rule['add_tags'][handling.lower()] = handling
-            set_email_rule(sender, rule, rules)
-            print("OK, we'll tag all of these emails with \"" + handling + "\".")
-    # return messages
-
-
-def get_from_sender(message, service, full_address=False):
-    api = service.users().messages()
-    mess = api.get(userId='me', id=message['id'], format='metadata').execute()
-    headers = mess['payload']['headers']
-    temp_dict = {}
-    for header in headers:
-        # if header['name'] == 'Subject':
-        #     temp_dict['Subject'] = header['value']
-        # elif header['name'] == 'Date':
-        #     msg_date = header['value']
-        #     date_parse = (parser.parse(msg_date))
-        #     temp_dict['Date'] = str(date_parse.date())
-        if header['name'] == 'From':
-            temp_dict['From'] = header['value']
-    if 'From' in temp_dict:
-        (name, email_address) = parseaddr(temp_dict['From'])
-        if full_address:
-            return email_address
-        else:
-            (username, domain) = parse("{}@{}", email_address)
-            return domain
-        return sender.lower()
-    else:
-        return False
-
-
-def tag_messages(messages, service):
-    print("Filing messages. This may take awhile...")
-    limit = get_config()['limit']
-    api = service.users().messages()
-    response = service.users().labels().list(userId='me').execute()
-    labels = response['labels']
-    label_map = {l.get('name').lower(): l.get('id') for l in labels}
-    rules = get_email_rules()
-    count = 1
-    for message in messages:
-        domain = get_from_sender(message, service, False)
-        email = get_from_sender(message, service, True)
-        for sender in [domain,email]:
-            rule = get_email_rule(sender, rules)
-            if len(rule['add_tags'].keys()) > 0:
-                add_rule = [label_map[key] for key in rule['add_tags'].keys()]
-                request_body = {'addLabelIds': add_rule,
-                                'removeLabelIds': ['INBOX']}
-                message = api.modify(userId='me', id=message['id'],
-                                     body=request_body).execute()
-        count += 1
-        if count % 100 == 0:
-            print(str(count) + " messages processed.")
-        if limit == 0 or count > limit:
-            exit()
-
-
-def define_rule_tags(service):
-    """Applies user-specified rules to emails in the inbox.
-    """
-    rules = get_email_rules()
-    try:
-        response = service.users().labels().list(userId='me').execute()
-        labels = response['labels']
-        label_tags = [l.get('name').lower() for l in labels]
-    except errors.HttpError, error:
-        print('An error occurred: %s' % error)
-    for sender in rules.keys():
-        # print("sender " + sender + " has the following tags:")
-        for key in rules[sender]['add_tags'].keys():
-            # print("* " + tag)
-            if not key.lower() in label_tags:
-                label = MakeLabel(rules[sender]['add_tags'][key])
-                CreateLabel(service, 'me', label)
-
-
-def get_email_rules():
-    """Retrieves email rules from file rules.json."""
-    try:
-        with open('rules.json') as json_file:
-            rules = json.load(json_file)
-            return rules
-    except IOError:
-        return {}
-
-
-def set_email_rules(rules):
-    """Saves email rules to file rules.json."""
-    with open('rules.json', 'w') as outfile:
-        json.dump(rules, outfile)
 
 
 def get_email_rule(sender, rules):
