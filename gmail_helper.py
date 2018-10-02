@@ -14,9 +14,15 @@ from shutil import copyfile
 import time
 import os
 import stat
+# from flask import Flask, request, jsonify
+# from flask_restful import Resource, Api
+# from json import dumps
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = 'https://www.googleapis.com/auth/gmail.modify'
+
+# app = Flask(__name__)
+# api = Api(app)
 
 main_responses = {}
 main_responses['intro'] = """I can do several things:
@@ -291,63 +297,6 @@ class Dialog():
         self.dialog_persister.set(self.response)
 
 
-def main():
-    persisters = {}
-    persisters['config'] = JsonFilePersister('config',
-                                             {'limit': 0,
-                                              'cache_maxage': 60 * 60 * 6})
-    persisters['rules'] = JsonFilePersister('rules', {})
-    persisters['cache'] = JsonFilePersister('cache',
-                                            {'sorted_domain_counts': [],
-                                             'sorted_address_counts': []})
-
-    gmail_helper = GmailHelper(persisters)
-    service = gmail_helper.service
-
-    persisters = {}
-    persisters['dialog'] = JsonFilePersister('dialog', main_responses)
-
-    main_dialog = Dialog('main_dialog', intro = main_responses['intro'],
-                         questions = main_responses['questions'],
-                         conclusion = main_responses['conclusion'],
-                         persisters = persisters)
-    print(main_dialog.intro())
-    handling = raw_input(main_dialog.questions() + " ")
-    if "domains" in handling.lower():
-        gmail_helper.ask_for_sender_rules(full_address=False)
-    elif "addresses" in handling.lower():
-        gmail_helper.ask_for_sender_rules(full_address=True)
-    elif "apply" in handling.lower():
-        messages = gmail_helper.collect_messages_list()
-        gmail_helper.define_rule_tags()
-        gmail_helper.tag_messages(messages)
-    elif "backup" in handling.lower():
-        backup_rules()
-    elif "limit" in handling.lower():
-        config = gmail_helper.config_persister.get()
-        print("Limit was previously " + str(config['limit']) + ".")
-        m = re.search(r'(\d*)\s*$',handling.lower())
-        limit = m.group(0)
-        if limit == '':
-            config['limit'] = 0
-        else:
-            config['limit'] = int(limit)
-        gmail_helper.config_persister.set(config)
-        print("I've changed the limit to " + str(config['limit']) + ".")
-    elif "cache" in handling.lower():
-        config = gmail_helper.config_persister.get()
-        print("Cache was previously " + str(config['cache_maxage']) + " seconds.")
-        m = re.search(r'(\d*)\s*$',handling.lower())
-        cache = m.group(0)
-        if cache == '':
-            config['cache_maxage'] = 0
-        else:
-            config['cache_maxage'] = int(cache)
-        gmail_helper.config_persister.set(config)
-        print("I've set caching to " + str(config['cache_maxage']) + " seconds.")
-    print(main_dialog.conclusion())
-
-
 def backup_rules():
     copyfile("rules.json", "rules.json.backup")
     copyfile("config.json", "config.json.backup")
@@ -469,6 +418,68 @@ def MakeLabel(label_name, mlv='show', llv='labelShow'):
   return label
 
 
+def main():
+    persisters = {}
+    persisters['config'] = JsonFilePersister('config',
+                                             {'limit': 0,
+                                              'cache_maxage': 60 * 60 * 6})
+    persisters['rules'] = JsonFilePersister('rules', {})
+    persisters['cache'] = JsonFilePersister('cache',
+                                            {'sorted_domain_counts': [],
+                                             'sorted_address_counts': []})
+
+    gmail_helper = GmailHelper(persisters)
+    service = gmail_helper.service
+
+    persisters = {}
+    persisters['dialog'] = JsonFilePersister('dialog', main_responses)
+
+    main_dialog = Dialog('main_dialog', intro = main_responses['intro'],
+                         questions = main_responses['questions'],
+                         conclusion = main_responses['conclusion'],
+                         persisters = persisters)
+    print(main_dialog.intro())
+    handling = raw_input(main_dialog.questions() + " ")
+    if "domains" in handling.lower():
+        gmail_helper.ask_for_sender_rules(full_address=False)
+    elif "addresses" in handling.lower():
+        gmail_helper.ask_for_sender_rules(full_address=True)
+    elif "apply" in handling.lower():
+        messages = gmail_helper.collect_messages_list()
+        gmail_helper.define_rule_tags()
+        gmail_helper.tag_messages(messages)
+    elif "backup" in handling.lower():
+        backup_rules()
+    elif "limit" in handling.lower():
+        config = gmail_helper.config_persister.get()
+        print("Limit was previously " + str(config['limit']) + ".")
+        m = re.search(r'(\d*)\s*$',handling.lower())
+        limit = m.group(0)
+        if limit == '':
+            config['limit'] = 0
+        else:
+            config['limit'] = int(limit)
+        gmail_helper.config_persister.set(config)
+        print("I've changed the limit to " + str(config['limit']) + ".")
+    elif "cache" in handling.lower():
+        config = gmail_helper.config_persister.get()
+        print("Cache was previously " + str(config['cache_maxage']) + " seconds.")
+        m = re.search(r'(\d*)\s*$',handling.lower())
+        cache = m.group(0)
+        if cache == '':
+            config['cache_maxage'] = 0
+        else:
+            config['cache_maxage'] = int(cache)
+        gmail_helper.config_persister.set(config)
+        print("I've set caching to " + str(config['cache_maxage']) + " seconds.")
+    print(main_dialog.conclusion())
+
+
+# api.add_resource(Employees, '/employees') # Route_1
+# api.add_resource(Tracks, '/tracks') # Route_2
+# api.add_resource(Employees_Name, '/employees/<employee_id>') # Route_3
+
 
 if __name__ == '__main__':
+    # app.run()
     main()
