@@ -18,6 +18,19 @@ import stat
 # If modifying these scopes, delete the file token.json.
 SCOPES = 'https://www.googleapis.com/auth/gmail.modify'
 
+main_responses = {}
+main_responses['intro'] = """I can do several things:
+* Define new email rules based on sender domains (domains)
+* Define new email rules based on sender email addresses (addresses)
+* Backup rules (backup)
+* Apply the rules (apply)
+* Set a limit on the number of messages to process (limit)
+* Set the number of seconds to cache sender counts (cache)
+"""
+main_responses['questions'] = "What would you like me to do?"
+main_responses['conclusion'] = "OK, done."
+
+
 class GmailHelper():
     """The GmailHelper object implements defining and apply rules for
     managing messages in a Gmail account.
@@ -218,12 +231,10 @@ class JsonFilePersister():
         except IOError:
             return self.default_value
 
-
     def set(self, value):
         """Saves configuration settings to file config.json."""
         with open(self.name + '.json', 'w') as outfile:
             json.dump(value, outfile)
-
 
     def delete(self):
         ## If file exists, delete it ##
@@ -234,6 +245,50 @@ class JsonFilePersister():
         if os.path.isfile(self.name + '.json'):
             return time.time() - os.stat(self.name + '.json')[stat.ST_MTIME]
         return 0
+
+
+class Dialog():
+    """The Dialog object defines a sequence of steps that can take actions
+    and return values and text within a context.
+
+    This requires using a token in file token.json with a valid
+    token key to establish access to a gmail service.
+
+    Attributes:
+        service (object): the gmail service
+    """
+
+    context = {}
+    persist = False
+    response = {}
+
+    def __init__(self, name,
+                 intro="Let's start",
+                 questions=[],
+                 conclusion="OK, thanks.",
+                 persisters={}):
+        """Initializes the Dialog object
+        """
+        self.response['intro'] = intro
+        self.response['questions'] = questions
+        self.response['conclusion'] = conclusion
+        if persisters:
+            self.persist = True
+            self.dialog_persister = persisters['dialog']
+            self.dialog_persister.set(self.response)
+
+    def intro(self):
+        return self.dialog_persister.get()['intro']
+
+    def questions(self):
+        return self.dialog_persister.get()['questions']
+
+    def conclusion(self):
+        return self.dialog_persister.get()['conclusion']
+
+    def set(self, attr, value):
+        self.response['attr'] = value
+        self.dialog_persister.set(self.response)
 
 
 def main():
@@ -249,14 +304,15 @@ def main():
     gmail_helper = GmailHelper(persisters)
     service = gmail_helper.service
 
-    print("I can do several things:")
-    print("* Define new email rules based on sender domains (domains)")
-    print("* Define new email rules based on sender email addresses (addresses)")
-    print("* Backup rules (backup)")
-    print("* Apply the rules (apply)")
-    print("* Set a limit on the number of messages to process (limit)")
-    print("* Set the number of seconds to cache sender counts (cache)")
-    handling = raw_input("What would you like me to do? ")
+    persisters = {}
+    persisters['dialog'] = JsonFilePersister('dialog', main_responses)
+
+    main_dialog = Dialog('main_dialog', intro = main_responses['intro'],
+                         questions = main_responses['questions'],
+                         conclusion = main_responses['conclusion'],
+                         persisters = persisters)
+    print(main_dialog.intro())
+    handling = raw_input(main_dialog.questions() + " ")
     if "domains" in handling.lower():
         gmail_helper.ask_for_sender_rules(full_address=False)
     elif "addresses" in handling.lower():
@@ -289,6 +345,7 @@ def main():
             config['cache_maxage'] = int(cache)
         gmail_helper.config_persister.set(config)
         print("I've set caching to " + str(config['cache_maxage']) + " seconds.")
+    print(main_dialog.conclusion())
 
 
 def backup_rules():
