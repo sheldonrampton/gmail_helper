@@ -14,15 +14,10 @@ from shutil import copyfile
 import time
 import os
 import stat
-from flask import Flask, request, jsonify
-from flask_restful import Resource, Api
-from json import dumps
+import shellbot_persisters
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = 'https://www.googleapis.com/auth/gmail.modify'
-
-app = Flask(__name__)
-api = Api(app)
 
 main_responses = {}
 main_responses['intro'] = """I can do several things:
@@ -475,50 +470,5 @@ def main():
     print(main_dialog.conclusion())
 
 
-class Config(Resource):
-    def get(self, name=''):
-        config_persister = JsonFilePersister('config',
-                                             {'limit': 0,
-                                              'cache_maxage': 60 * 60 * 6})
-        config = config_persister.get()
-        if name == '':
-            result = config
-        else:
-            result = config[name]
-        return jsonify(result)
-
-    def put(self, name=''):
-        config_persister = JsonFilePersister('config',
-                                             {'limit': 0,
-                                              'cache_maxage': 60 * 60 * 6})
-        config = config_persister.get()
-        if name == '':
-            config = request.form
-            result = config
-        else:
-            config[name] = request.form['value']
-            result = config[name]
-        config_persister.set(config)
-        return jsonify(result)
-
-    def delete(self, name=''):
-        config_persister = JsonFilePersister('config',
-                                             {'limit': 0,
-                                              'cache_maxage': 60 * 60 * 6})
-        config = config_persister.get()
-        if name == '':
-            config = {}
-        else:
-            config.pop(name, None)
-        config_persister.set(config)
-        return jsonify(config)
-
-
-api.add_resource(Config, '/config', '/config/<name>') # Route_1
-# api.add_resource(Tracks, '/tracks') # Route_2
-# api.add_resource(Employees_Name, '/employees/<employee_id>') # Route_3
-
-
 if __name__ == '__main__':
-    app.run(port='5002')
-    # main()
+    main()
