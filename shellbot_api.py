@@ -12,47 +12,60 @@ class ShellbotAPI():
     def __init__(self, port='5000'):
         app = Flask(__name__)
         api = Api(app)
-        api.add_resource(Config, '/config', '/config/<name>') # Route_1
+        json_persister = JsonFilePersister('config',
+                                      {'limit': 0,
+                                       'cache_maxage': 60 * 60 * 6})
+        api.add_resource(Config, '/config', '/config/<name>',
+                         resource_class_kwargs={'persister': json_persister})
+
+        rules_persister = JsonFilePersister('rules', {})
+        api.add_resource(Rules, '/rules', '/rules/<name>',
+                         resource_class_kwargs={'persister': rules_persister})
         app.run(port=port)
 
 
-class Config(Resource):
+class PersistentResource(Resource):
+    def __init__(self, **kwargs):
+        self.persister = kwargs['persister']
+
     def get(self, name=''):
-        config_persister = JsonFilePersister('config',
-                                             {'limit': 0,
-                                              'cache_maxage': 60 * 60 * 6})
-        config = config_persister.get()
+        values = self.persister.get()
         if name == '':
-            result = config
+            result = values
         else:
-            result = config[name]
+            result = values[name]
         return jsonify(result)
 
     def put(self, name=''):
-        config_persister = JsonFilePersister('config',
-                                             {'limit': 0,
-                                              'cache_maxage': 60 * 60 * 6})
-        config = config_persister.get()
+        values = self.persister.get()
         if name == '':
-            config = request.form
-            result = config
+            values = request.form
+            result = values
         else:
-            config[name] = request.form['value']
-            result = config[name]
-        config_persister.set(config)
+            values[name] = request.form['value']
+            result = values[name]
+        self.persister.set(values)
         return jsonify(result)
 
     def delete(self, name=''):
-        config_persister = JsonFilePersister('config',
-                                             {'limit': 0,
-                                              'cache_maxage': 60 * 60 * 6})
-        config = config_persister.get()
+        values = self.persister.get()
         if name == '':
-            config = {}
+            values = {}
         else:
-            config.pop(name, None)
-        config_persister.set(config)
-        return jsonify(config)
+            values.pop(name, None)
+        self.persister.set(values)
+        return jsonify(values)
+
+
+class Config(PersistentResource):
+    def __init__(self, **kwargs):
+        self.persister = kwargs['persister']
+
+
+class Rules(PersistentResource):
+    def __init__(self, **kwargs):
+        self.persister = kwargs['persister']
+
 
 
 if __name__ == '__main__':
