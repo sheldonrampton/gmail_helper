@@ -21,6 +21,11 @@ class ShellbotAPI():
         rules_persister = JsonFilePersister('rules', {})
         api.add_resource(Rules, '/rules', '/rules/<name>',
                          resource_class_kwargs={'persister': rules_persister})
+
+        rules_persister = JsonFilePersister('rules', {})
+        api.add_resource(Rules, '/rules', '/rules/<name>',
+                         resource_class_kwargs={'persister': rules_persister})
+
         app.run(port=port)
 
 

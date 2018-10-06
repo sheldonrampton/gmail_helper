@@ -14,7 +14,7 @@ from shutil import copyfile
 import time
 import os
 import stat
-import shellbot_persisters
+from shellbot_persisters import JsonFilePersister
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = 'https://www.googleapis.com/auth/gmail.modify'
@@ -65,7 +65,7 @@ class GmailHelper():
         """
         messages = self.collect_messages_list()
         cache_maxage = self.config_persister.get()['cache_maxage']
-        age = self.cache_persister.file_age_in_seconds()
+        age = self.cache_persister.age_in_seconds()
         print("The cache is " + str(age) + " seconds old.")
         if age > cache_maxage:
             self.cache_persister.delete()
@@ -210,42 +210,6 @@ OK? Let's get started...""")
             return sender.lower()
         else:
             return False
-
-
-class JsonFilePersister():
-    """The Persister class implements getting and setting persistent
-    attributes saved in a Json file.
-    """
-
-    def __init__(self, name, default_value = {}):
-        """Initializes the JsonFilePersister object
-        """
-        self.name = name
-        self.default_value = default_value
-
-    def get(self):
-        """Retrieves info settings from file self.name + '.json'.
-        """
-        try:
-            with open(self.name + '.json') as json_file:
-                return json.load(json_file)
-        except IOError:
-            return self.default_value
-
-    def set(self, value):
-        """Saves configuration settings to file config.json."""
-        with open(self.name + '.json', 'w') as outfile:
-            json.dump(value, outfile)
-
-    def delete(self):
-        ## If file exists, delete it ##
-        if os.path.isfile(self.name + '.json'):
-            os.remove(self.name + '.json')
-
-    def file_age_in_seconds(self):
-        if os.path.isfile(self.name + '.json'):
-            return time.time() - os.stat(self.name + '.json')[stat.ST_MTIME]
-        return 0
 
 
 class Dialog():

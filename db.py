@@ -38,7 +38,7 @@ class ShellbotDB():
         self.cursor.execute("CREATE TABLE shellbot_config (" +
             "uid INT, " +
             "config_name VARCHAR(255), config_value TEXT, " +
-            "KEY `uid` (`uid`))"
+            "PRIMARY KEY(uid, config_name))"
         )
 
         # Create gmail_rules table
@@ -49,18 +49,56 @@ class ShellbotDB():
             "action VARCHAR(255), " +
             "rule_key VARCHAR(255), " +
             "rule_value VARCHAR(255), " +
-            "KEY `uid` (`uid`))"
+            "PRIMARY KEY(uid, sender, action, rule_key))"
         )
 
         # Create cache table
         # Example: 1, 'facebook.com', 'domain', '4'
         # Example: 1, 'sheldon@gmail.com', 'address', '7'
         self.cursor.execute("CREATE TABLE shellbot_cache (uid INT, " +
-            "sender VARCHAR(255) PRIMARY KEY," +
+            "sender VARCHAR(255)," +
             "type VARCHAR(16), " +
             "message_count INT, " +
-            "KEY `uid` (`uid`))"
+            "PRIMARY KEY(uid, sender, type))"
         )
+
+    def get_config(self, config, uid=1):
+        rows = [(uid, k, v) for k, v in config.iteritems()]
+        query = ("INSERT INTO shellbot_config (uid, config_name, config_value) " +
+                 "VALUES (%s, %s, %s) " +
+                 "ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)")
+        self.cursor.executemany(query, rows)
+        self.db.commit()
+
+    def get_rules(self, rules, uid=1):
+        rows = []
+        for sender, actions in rules.iteritems():
+            set_status = [(uid, sender, 'set_status', k, v)
+                          for k,v in actions['set_status'].iteritems()]
+            remove_tags = [(uid, sender, 'remove_tags', k, v)
+                           for k,v in actions['remove_tags'].iteritems()]
+            add_tags = [(uid, sender, 'add_tags', k, v)
+                        for k,v in actions['add_tags'].iteritems()]
+            rows.extend(set_status)
+            rows.extend(remove_tags)
+            rows.extend(add_tags)
+        query = ("INSERT INTO shellbot_gmail_rules (uid, sender, action, rule_key, rule_value) " +
+                 "VALUES (%s, %s, %s, %s, %s) " +
+                 "ON DUPLICATE KEY UPDATE rule_value = VALUES(rule_value)")
+        self.cursor.executemany(query, rows)
+        self.db.commit()
+
+    def get_cache(self, cache, uid=1):
+        rows = []
+        sorted_domain_counts = [(uid, x[0], 'domain', x[1]) for x in cache['sorted_domain_counts']]
+        sorted_address_counts = [(uid, x[0], 'address', x[1]) for x in cache['sorted_address_counts']]
+        rows.extend(sorted_domain_counts)
+        rows.extend(sorted_address_counts)
+        query = ("INSERT INTO shellbot_cache (uid, sender, type, message_count) " +
+                 "VALUES (%s, %s, %s, %s) " +
+                 "ON DUPLICATE KEY UPDATE message_count = VALUES(message_count)")
+        self.cursor.executemany(query, rows)
+        self.db.commit()
 
 
 def main():
@@ -78,6 +116,28 @@ def main():
     bot_db.create_tables()
     bot_db.cursor.execute("SHOW TABLES")
     for x in bot_db.cursor:
+        print(x)
+
+    config = JsonFilePersister('config', {}).get()
+    bot_db.get_config(config)
+    bot_db.cursor.execute("SELECT * FROM shellbot_config")
+    myresult = bot_db.cursor.fetchall()
+    for x in myresult:
+        print(x)
+
+    rules = JsonFilePersister('rules', {}).get()
+    bot_db.get_rules(rules)
+    bot_db.cursor.execute("SELECT * FROM shellbot_gmail_rules")
+    myresult = bot_db.cursor.fetchall()
+    for x in myresult:
+        print(x)
+
+    print "CACHE"
+    cache = JsonFilePersister('cache', {}).get()
+    bot_db.get_cache(cache)
+    bot_db.cursor.execute("SELECT * FROM shellbot_cache")
+    myresult = bot_db.cursor.fetchall()
+    for x in myresult:
         print(x)
 
 
