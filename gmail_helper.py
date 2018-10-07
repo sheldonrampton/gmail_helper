@@ -64,7 +64,7 @@ class GmailHelper():
         """Asks the user to specify rules for handling Gmail messages.
         """
         messages = self.collect_messages_list()
-        cache_maxage = self.config_persister.get()['cache_maxage']
+        cache_maxage = int(self.config_persister.get()['cache_maxage'])
         age = self.cache_persister.age_in_seconds()
         print("The cache is " + str(age) + " seconds old.")
         if age > cache_maxage:
@@ -78,7 +78,7 @@ class GmailHelper():
         if len(sorted_counts) == 0:
             sender_counts = defaultdict(int)
             count = 1
-            limit = self.config_persister.get()['limit']
+            limit = int(self.config_persister.get()['limit'])
             for message in messages:
                 sender = self.get_from_sender(message, full_address=full_address)
                 if sender:
@@ -176,7 +176,8 @@ OK? Let's get started...""")
 
     def tag_messages(self, messages):
         print("Filing messages. This may take awhile...")
-        limit = self.config_persister.get()['limit']
+        limit = int(self.config_persister.get()['limit'])
+        print("LIMIT: " + str(limit))
         api = self.service.users().messages()
         response = self.service.users().labels().list(userId='me').execute()
         labels = response['labels']

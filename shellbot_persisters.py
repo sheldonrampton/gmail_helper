@@ -2,42 +2,42 @@ import json
 import time
 import os
 import stat
+import db
 
 
-class DBFilePersister():
-    """The DBFilePersister class implements getting and setting persistent
+class DBPersister():
+    """The DBPersister class implements getting and setting persistent
     attributes saved in a MySQL database.
     """
 
-    def __init__(self, name, default_value = {}):
+    def __init__(self, name, default_value = {}, uid=1):
         """Initializes the DBFilePersister object
         """
         self.name = name
         self.default_value = default_value
+        db_config = JsonFilePersister('db', {}).get()
+        host=db_config['host']
+        user=db_config['user']
+        passwd=db_config['passwd']
+        if self.name == 'config':
+            self.db = db.ConfigDB(host, user, passwd)
+        elif self.name == 'rules':
+            self.db = db.RulesDB(host, user, passwd)
+        elif self.name == 'cache':
+            self.db = db.CacheDB(host, user, passwd)
+        self.uid = uid
 
     def get(self):
-        """Retrieves info settings from file self.name + '.json'.
-        """
-        try:
-            with open(self.name + '.json') as json_file:
-                return json.load(json_file)
-        except IOError:
-            return self.default_value
+        return self.db.get(uid=self.uid)
 
     def set(self, value):
-        """Saves configuration settings to file config.json."""
-        with open(self.name + '.json', 'w') as outfile:
-            json.dump(value, outfile)
+        self.db.set(value, uid=self.uid)
 
     def delete(self):
-        ## If file exists, delete it ##
-        if os.path.isfile(self.name + '.json'):
-            os.remove(self.name + '.json')
+        self.db.delete(uid=self.uid)
 
     def age_in_seconds(self):
-        if os.path.isfile(self.name + '.json'):
-            return time.time() - os.stat(self.name + '.json')[stat.ST_MTIME]
-        return 0
+        return 1
 
 
 class JsonFilePersister():

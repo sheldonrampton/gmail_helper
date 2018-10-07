@@ -1,5 +1,5 @@
 import mysql.connector
-from shellbot_persisters import JsonFilePersister
+import shellbot_persisters
 
 
 class ShellbotDB():
@@ -100,7 +100,6 @@ class RulesDB(ShellbotDB):
         result = self.cursor.fetchall()
         rules = {}
         for sender, action, rule_key, rule_value in result:
-            print "Sender: " + sender + "; Action: " + action + "; rule_key: " + rule_key + "; rule_value: " + rule_value
             if not sender in rules:
                 rules[sender] = {"set_status": {}, "remove_tags": {}, "add_tags": {}}
             rules[sender][action][rule_key] = rule_value
@@ -170,7 +169,7 @@ class CacheDB(ShellbotDB):
 
 
 def main():
-    db_config = JsonFilePersister('db', {}).get()
+    db_config = shellbot_persisters.JsonFilePersister('db', {}).get()
     host=db_config['host']
     user=db_config['user']
     passwd=db_config['passwd']
@@ -186,7 +185,7 @@ def main():
     for x in bot_db.cursor:
         print(x)
 
-    config = JsonFilePersister('config', {}).get()
+    config = shellbot_persisters.JsonFilePersister('config', {}).get()
     config_db = ConfigDB(host, user, passwd)
     config_db.set(config)
     config_db.cursor.execute("SELECT * FROM shellbot_config")
@@ -194,7 +193,7 @@ def main():
     for x in myresult:
         print(x)
 
-    rules = JsonFilePersister('rules', {}).get()
+    rules = shellbot_persisters.JsonFilePersister('rules', {}).get()
     rules_db = RulesDB(host, user, passwd)
     rules_db.set(rules)
     rules_db.cursor.execute("SELECT * FROM shellbot_gmail_rules")
@@ -202,7 +201,7 @@ def main():
     for x in myresult:
         print(x)
 
-    cache = JsonFilePersister('cache', {}).get()
+    cache = shellbot_persisters.JsonFilePersister('cache', {}).get()
     cache_db = CacheDB(host, user, passwd)
     cache_db.set(cache)
     cache_db.cursor.execute("SELECT * FROM shellbot_cache")
