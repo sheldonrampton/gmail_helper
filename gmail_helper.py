@@ -72,7 +72,6 @@ class GmailHelper():
             print("Deleting cache.")
         cache = self.cache_persister.get()
         if full_address:
-            print("FULL ADDRESS")
             sorted_counts = cache['sorted_address_counts']
         else:
             sorted_counts = cache['sorted_domain_counts']
@@ -108,10 +107,25 @@ class GmailHelper():
 
 OK? Let's get started...""")
         rules = self.rules_persister.get()
+        api = self.service.users().messages()
         for count_item in sorted_counts:
             (sender, count) = count_item
             print("sender " + sender + " has " + str(count) + " messages.")
             handling = raw_input("How do you want it handled? ")
+            hint_aliases = ["h", "hint", "hints", "help"]
+            if handling.lower() in hint_aliases:
+                sender_messages=ListMessagesMatchingQuery(self.service, 'me', query='label:INBOX from:' + sender)
+                for sm in sender_messages[:5]:
+                    mess = api.get(userId='me', id=sm['id'], format='metadata').execute()
+                    headers = mess['payload']['headers']
+                    print("OK, here are the subject lines of some messages from this sender:")
+                    subject = ""
+                    for header in headers:
+                        if header['name'] == 'Subject':
+                            subject = header['value']
+                            break
+                    print("* " + subject)
+                handling = raw_input("So how do you want it handled? ")
             if handling.lower() == "cancel":
                 print("Your will be done, my liege. I will do nothing.")
                 break
