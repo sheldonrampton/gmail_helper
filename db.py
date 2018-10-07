@@ -62,13 +62,18 @@ class ShellbotDB():
             "PRIMARY KEY(uid, sender, type))"
         )
 
-    def get_config(self, uid=1):
+class ConfigDB(ShellbotDB):
+    def __init__(self, hostname, username, password, dbasename='shellbot'):
+        ShellbotDB.__init__(self, hostname, username, password, dbasename)
+        self.open_database()
+
+    def get(self, uid=1):
         query = "SELECT config_name, config_value FROM shellbot_config WHERE uid = %s"
         self.cursor.execute(query, (uid, ))
         result = self.cursor.fetchall()
         return {k: v for k, v in result}
 
-    def set_config(self, config, uid=1):
+    def set(self, config, uid=1):
         rows = [(uid, k, v) for k, v in config.iteritems()]
         query = ("INSERT INTO shellbot_config (uid, config_name, config_value) " +
                  "VALUES (%s, %s, %s) " +
@@ -76,7 +81,19 @@ class ShellbotDB():
         self.cursor.executemany(query, rows)
         self.db.commit()
 
-    def get_rules(self, uid=1):
+    def delete(self, uid=1):
+        query = "DELETE FROM shellbot_config WHERE uid = %s"
+        param = (uid,)
+        self.cursor.execute(query, param)
+        self.db.commit()
+
+
+class RulesDB(ShellbotDB):
+    def __init__(self, hostname, username, password, dbasename='shellbot'):
+        ShellbotDB.__init__(self, hostname, username, password, dbasename)
+        self.open_database()
+
+    def get(self, uid=1):
         query = ("SELECT sender, action, rule_key, rule_value " +
                  "FROM shellbot_gmail_rules WHERE uid = %s")
         self.cursor.execute(query, (uid, ))
@@ -89,7 +106,7 @@ class ShellbotDB():
             rules[sender][action][rule_key] = rule_value
         return rules
 
-    def set_rules(self, rules, uid=1):
+    def set(self, rules, uid=1):
         rows = []
         for sender, actions in rules.iteritems():
             set_status = [(uid, sender, 'set_status', k, v)
@@ -107,7 +124,19 @@ class ShellbotDB():
         self.cursor.executemany(query, rows)
         self.db.commit()
 
-    def get_cache(self, uid=1):
+    def delete(self, uid=1):
+        query = "DELETE FROM shellbot_gmail_rules WHERE uid = %s"
+        param = (uid,)
+        self.cursor.execute(query, param)
+        self.db.commit()
+
+
+class CacheDB(ShellbotDB):
+    def __init__(self, hostname, username, password, dbasename='shellbot'):
+        ShellbotDB.__init__(self, hostname, username, password, dbasename)
+        self.open_database()
+
+    def get(self, uid=1):
         cache = {'sorted_domain_counts': [], 'sorted_address_counts': []}
         query = ('SELECT sender, message_count ' +
                  'FROM shellbot_cache WHERE uid = %s AND type = "domain"')
@@ -121,7 +150,7 @@ class ShellbotDB():
         cache['sorted_address_counts'] = [[s, c] for s, c in result]
         return cache
 
-    def set_cache(self, cache, uid=1):
+    def set(self, cache, uid=1):
         rows = []
         sorted_domain_counts = [(uid, x[0], 'domain', x[1]) for x in cache['sorted_domain_counts']]
         sorted_address_counts = [(uid, x[0], 'address', x[1]) for x in cache['sorted_address_counts']]
@@ -133,19 +162,7 @@ class ShellbotDB():
         self.cursor.executemany(query, rows)
         self.db.commit()
 
-    def delete_config(self, uid=1):
-        query = "DELETE FROM shellbot_config WHERE uid = %s"
-        param = (uid,)
-        self.cursor.execute(query, param)
-        self.db.commit()
-
-    def delete_rules(self, uid=1):
-        query = "DELETE FROM shellbot_gmail_rules WHERE uid = %s"
-        param = (uid,)
-        self.cursor.execute(query, param)
-        self.db.commit()
-
-    def delete_cache(self, uid=1):
+    def delete(self, uid=1):
         query = "DELETE FROM shellbot_cache WHERE uid = %s"
         param = (uid,)
         self.cursor.execute(query, param)
@@ -170,30 +187,32 @@ def main():
         print(x)
 
     config = JsonFilePersister('config', {}).get()
-    bot_db.set_config(config)
-    bot_db.cursor.execute("SELECT * FROM shellbot_config")
-    myresult = bot_db.cursor.fetchall()
+    config_db = ConfigDB(host, user, passwd)
+    config_db.set(config)
+    config_db.cursor.execute("SELECT * FROM shellbot_config")
+    myresult = config_db.cursor.fetchall()
     for x in myresult:
         print(x)
 
     rules = JsonFilePersister('rules', {}).get()
-    bot_db.set_rules(rules)
-    bot_db.cursor.execute("SELECT * FROM shellbot_gmail_rules")
-    myresult = bot_db.cursor.fetchall()
+    rules_db = RulesDB(host, user, passwd)
+    rules_db.set(rules)
+    rules_db.cursor.execute("SELECT * FROM shellbot_gmail_rules")
+    myresult = rules_db.cursor.fetchall()
     for x in myresult:
         print(x)
 
-    print "CACHE"
     cache = JsonFilePersister('cache', {}).get()
-    bot_db.set_cache(cache)
-    bot_db.cursor.execute("SELECT * FROM shellbot_cache")
-    myresult = bot_db.cursor.fetchall()
+    cache_db = CacheDB(host, user, passwd)
+    cache_db.set(cache)
+    cache_db.cursor.execute("SELECT * FROM shellbot_cache")
+    myresult = cache_db.cursor.fetchall()
     for x in myresult:
         print(x)
 
-    print bot_db.get_config()
-    print bot_db.get_rules()
-    print bot_db.get_cache()
+    print config_db.get()
+    print rules_db.get()
+    print cache_db.get()
 
 
 if __name__ == '__main__':
