@@ -10,7 +10,7 @@ class DBFilePersister():
     """
 
     def __init__(self, name, default_value = {}):
-        """Initializes the JsonFilePersister object
+        """Initializes the DBFilePersister object
         """
         self.name = name
         self.default_value = default_value

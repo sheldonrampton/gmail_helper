@@ -62,7 +62,13 @@ class ShellbotDB():
             "PRIMARY KEY(uid, sender, type))"
         )
 
-    def get_config(self, config, uid=1):
+    def get_config(self, uid=1):
+        query = "SELECT config_name, config_value FROM shellbot_config WHERE uid = %s"
+        self.cursor.execute(query, (uid, ))
+        result = self.cursor.fetchall()
+        return {k: v for k, v in result}
+
+    def set_config(self, config, uid=1):
         rows = [(uid, k, v) for k, v in config.iteritems()]
         query = ("INSERT INTO shellbot_config (uid, config_name, config_value) " +
                  "VALUES (%s, %s, %s) " +
@@ -70,7 +76,20 @@ class ShellbotDB():
         self.cursor.executemany(query, rows)
         self.db.commit()
 
-    def get_rules(self, rules, uid=1):
+    def get_rules(self, uid=1):
+        query = ("SELECT sender, action, rule_key, rule_value " +
+                 "FROM shellbot_gmail_rules WHERE uid = %s")
+        self.cursor.execute(query, (uid, ))
+        result = self.cursor.fetchall()
+        rules = {}
+        for sender, action, rule_key, rule_value in result:
+            print "Sender: " + sender + "; Action: " + action + "; rule_key: " + rule_key + "; rule_value: " + rule_value
+            if not sender in rules:
+                rules[sender] = {"set_status": {}, "remove_tags": {}, "add_tags": {}}
+            rules[sender][action][rule_key] = rule_value
+        return rules
+
+    def set_rules(self, rules, uid=1):
         rows = []
         for sender, actions in rules.iteritems():
             set_status = [(uid, sender, 'set_status', k, v)
@@ -88,7 +107,21 @@ class ShellbotDB():
         self.cursor.executemany(query, rows)
         self.db.commit()
 
-    def get_cache(self, cache, uid=1):
+    def get_cache(self, uid=1):
+        cache = {'sorted_domain_counts': [], 'sorted_address_counts': []}
+        query = ('SELECT sender, message_count ' +
+                 'FROM shellbot_cache WHERE uid = %s AND type = "domain"')
+        self.cursor.execute(query, (uid, ))
+        result = self.cursor.fetchall()
+        cache['sorted_domain_counts'] = [[s, c] for s, c in result]
+        query = ('SELECT sender, message_count ' +
+                 'FROM shellbot_cache WHERE uid = %s AND type = "address"')
+        self.cursor.execute(query, (uid, ))
+        result = self.cursor.fetchall()
+        cache['sorted_address_counts'] = [[s, c] for s, c in result]
+        return cache
+
+    def set_cache(self, cache, uid=1):
         rows = []
         sorted_domain_counts = [(uid, x[0], 'domain', x[1]) for x in cache['sorted_domain_counts']]
         sorted_address_counts = [(uid, x[0], 'address', x[1]) for x in cache['sorted_address_counts']]
@@ -98,6 +131,24 @@ class ShellbotDB():
                  "VALUES (%s, %s, %s, %s) " +
                  "ON DUPLICATE KEY UPDATE message_count = VALUES(message_count)")
         self.cursor.executemany(query, rows)
+        self.db.commit()
+
+    def delete_config(self, uid=1):
+        query = "DELETE FROM shellbot_config WHERE uid = %s"
+        param = (uid,)
+        self.cursor.execute(query, param)
+        self.db.commit()
+
+    def delete_rules(self, uid=1):
+        query = "DELETE FROM shellbot_gmail_rules WHERE uid = %s"
+        param = (uid,)
+        self.cursor.execute(query, param)
+        self.db.commit()
+
+    def delete_cache(self, uid=1):
+        query = "DELETE FROM shellbot_cache WHERE uid = %s"
+        param = (uid,)
+        self.cursor.execute(query, param)
         self.db.commit()
 
 
@@ -119,14 +170,14 @@ def main():
         print(x)
 
     config = JsonFilePersister('config', {}).get()
-    bot_db.get_config(config)
+    bot_db.set_config(config)
     bot_db.cursor.execute("SELECT * FROM shellbot_config")
     myresult = bot_db.cursor.fetchall()
     for x in myresult:
         print(x)
 
     rules = JsonFilePersister('rules', {}).get()
-    bot_db.get_rules(rules)
+    bot_db.set_rules(rules)
     bot_db.cursor.execute("SELECT * FROM shellbot_gmail_rules")
     myresult = bot_db.cursor.fetchall()
     for x in myresult:
@@ -134,11 +185,15 @@ def main():
 
     print "CACHE"
     cache = JsonFilePersister('cache', {}).get()
-    bot_db.get_cache(cache)
+    bot_db.set_cache(cache)
     bot_db.cursor.execute("SELECT * FROM shellbot_cache")
     myresult = bot_db.cursor.fetchall()
     for x in myresult:
         print(x)
+
+    print bot_db.get_config()
+    print bot_db.get_rules()
+    print bot_db.get_cache()
 
 
 if __name__ == '__main__':
