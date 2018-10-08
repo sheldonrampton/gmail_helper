@@ -3,11 +3,12 @@ import shellbot_persisters
 
 
 class ShellbotDB():
-    def __init__(self, hostname, username, password, dbasename='shellbot'):
+    def __init__(self, hostname, username, password, portnum=3306, dbasename='shellbot'):
         self.db = mysql.connector.connect(
             host=hostname,
             user=username,
-            passwd=password
+            passwd=password,
+            port=portnum
         )
         self.cursor = self.db.cursor()
         self.dbname = dbasename
@@ -63,8 +64,8 @@ class ShellbotDB():
         )
 
 class ConfigDB(ShellbotDB):
-    def __init__(self, hostname, username, password, dbasename='shellbot'):
-        ShellbotDB.__init__(self, hostname, username, password, dbasename)
+    def __init__(self, hostname, username, password, portnum=3306, dbasename='shellbot'):
+        ShellbotDB.__init__(self, hostname, username, password, portnum, dbasename)
         self.open_database()
 
     def get(self, uid=1):
@@ -89,8 +90,8 @@ class ConfigDB(ShellbotDB):
 
 
 class RulesDB(ShellbotDB):
-    def __init__(self, hostname, username, password, dbasename='shellbot'):
-        ShellbotDB.__init__(self, hostname, username, password, dbasename)
+    def __init__(self, hostname, username, password, portnum=3306, dbasename='shellbot'):
+        ShellbotDB.__init__(self, hostname, username, password, portnum, dbasename)
         self.open_database()
 
     def get(self, uid=1):
@@ -131,8 +132,8 @@ class RulesDB(ShellbotDB):
 
 
 class CacheDB(ShellbotDB):
-    def __init__(self, hostname, username, password, dbasename='shellbot'):
-        ShellbotDB.__init__(self, hostname, username, password, dbasename)
+    def __init__(self, hostname, username, password, portnum=3306, dbasename='shellbot'):
+        ShellbotDB.__init__(self, hostname, username, password, portnum, dbasename)
         self.open_database()
 
     def get(self, uid=1):

@@ -177,7 +177,6 @@ OK? Let's get started...""")
     def tag_messages(self, messages):
         print("Filing messages. This may take awhile...")
         limit = int(self.config_persister.get()['limit'])
-        print("LIMIT: " + str(limit))
         api = self.service.users().messages()
         response = self.service.users().labels().list(userId='me').execute()
         labels = response['labels']

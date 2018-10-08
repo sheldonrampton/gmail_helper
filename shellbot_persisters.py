@@ -19,12 +19,13 @@ class DBPersister():
         host=db_config['host']
         user=db_config['user']
         passwd=db_config['passwd']
+        portnum=int(db_config['portnum'])
         if self.name == 'config':
-            self.db = db.ConfigDB(host, user, passwd)
+            self.db = db.ConfigDB(host, user, passwd, portnum=portnum)
         elif self.name == 'rules':
-            self.db = db.RulesDB(host, user, passwd)
+            self.db = db.RulesDB(host, user, passwd, portnum=portnum)
         elif self.name == 'cache':
-            self.db = db.CacheDB(host, user, passwd)
+            self.db = db.CacheDB(host, user, passwd, portnum=portnum)
         self.uid = uid
 
     def get(self):
