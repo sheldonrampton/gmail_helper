@@ -1,11 +1,41 @@
 # gmail_helper
 Tools that use the Gmail API to categorize and organize Gmail messages. Presently it is a command-line utility that lets you identify email addresses that send you a lot of messages and define rules for classifying them by adding tags, e.g., "Friends," "Bills," "Jobs," etc. Another command will apply those rules to all messages in your inbox.
 
-Usage:
+## Usage
+
+### To test locally
 
 ```
 python gmail_helper.py
+
 ```
+
+This will store persistent information in .json files named config.json, rules.json, cache.json, dialog.json, credentials.json and token.json.
+
+```
+python test_api.py
+```
+
+This will spin up a local HTTP server at http://127.0.0.1:5002 where you can try the Shellbot API at endpoints including:
+
+* http://127.0.0.1:5002/rules
+* http://127.0.0.1:5002/cache
+* http://127.0.0.1:5002/config
+
+
+### To test with a MySQL database
+
+* Create a MySQL database.
+* Copy ```db.example.json``` to ```db.json``` and edit it with the host, user, password and port information.
+* Run ```python db.py``` to set up the config, rules and cache tables in the database and populate them with data from the .json files.
+* Run ```python test_db.py```
+
+
+```
+python test_db.py
+
+```
+
 
 Currently this is a very basic tool. Use at your own risk!
 

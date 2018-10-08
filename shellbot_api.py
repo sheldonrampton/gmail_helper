@@ -22,9 +22,9 @@ class ShellbotAPI():
         api.add_resource(Rules, '/rules', '/rules/<name>',
                          resource_class_kwargs={'persister': rules_persister})
 
-        rules_persister = JsonFilePersister('rules', {})
-        api.add_resource(Rules, '/rules', '/rules/<name>',
-                         resource_class_kwargs={'persister': rules_persister})
+        cache_persister = JsonFilePersister('cache', {})
+        api.add_resource(PersistentResource, '/cache', '/cache/<name>',
+                         resource_class_kwargs={'persister': cache_persister})
 
         app.run(port=port)
 
