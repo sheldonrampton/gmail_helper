@@ -1,15 +1,42 @@
-import mysql.connector
+try:
+    import os
+    import MySQLdb
+except ImportError:
+    import mysql.connector
 import shellbot_persisters
 
 
 class ShellbotDB():
     def __init__(self, hostname, username, password, portnum=3306, dbasename='shellbot'):
-        self.db = mysql.connector.connect(
-            host=hostname,
-            user=username,
-            passwd=password,
-            port=portnum
-        )
+        CLOUDSQL_CONNECTION_NAME = os.environ.get('CLOUDSQL_CONNECTION_NAME')
+        CLOUDSQL_USER = os.environ.get('CLOUDSQL_USER')
+        CLOUDSQL_PASSWORD = os.environ.get('CLOUDSQL_PASSWORD')
+
+        if os.getenv('SERVER_SOFTWARE', '').startswith('Google App Engine/'):
+            # Connect using the unix socket located at
+            # /cloudsql/cloudsql-connection-name.
+            cloudsql_unix_socket = os.path.join(
+                '/cloudsql', CLOUDSQL_CONNECTION_NAME)
+
+            self.db = MySQLdb.connect(
+                unix_socket=cloudsql_unix_socket,
+                user=CLOUDSQL_USER,
+                passwd=CLOUDSQL_PASSWORD)
+
+        # If the unix socket is unavailable, then try to connect using TCP. This
+        # will work if you're running a local MySQL server or using the Cloud SQL
+        # proxy, for example:
+        #
+        #   $ cloud_sql_proxy -instances=your-connection-name=tcp:3306
+        #
+        else:
+            self.db = mysql.connector.connect(
+                host=hostname,
+                user=username,
+                passwd=password,
+                port=portnum
+            )
+
         self.cursor = self.db.cursor()
         self.dbname = dbasename
 
