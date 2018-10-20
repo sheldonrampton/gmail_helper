@@ -1,0 +1,22 @@
+runtime: python27
+api_version: 1
+threadsafe: true
+
+libraries:
+- name: ssl
+  version: latest
+- name: MySQLdb
+  version: "latest"
+
+# [START handlers]
+handlers:
+- url: /static
+  static_dir: static
+- url: /.*
+  script: main.app
+# [END handlers]
+
+env_variables:
+    CLOUDSQL_CONNECTION_NAME: your-connection-name
+    CLOUDSQL_USER: root
+    CLOUDSQL_PASSWORD: your-cloudsql-user-password

@@ -36,6 +36,11 @@ python test_db.py
 
 ```
 
+### To deploy on Google Cloud Platform
+
+* Create a MySQL database in your Google project.
+* Update app.yaml with your database connection information
+* Deploy!
 
 Currently this is a very basic tool. Use at your own risk!
 
