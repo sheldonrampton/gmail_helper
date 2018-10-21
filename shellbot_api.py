@@ -57,6 +57,18 @@ class PersistentResource(Resource):
         self.persister.set(values)
         return jsonify(result)
 
+    def post(self, name=''):
+        values = self.persister.get()
+        if name == '':
+            json_values = request.get_json()['queryResult']['parameters']
+            values.update(json_values)
+            result = values
+        else:
+            values[name] = request.form['value']
+            result = values[name]
+#        self.persister.set(values)
+        return jsonify(result)
+
     def delete(self, name=''):
         values = self.persister.get()
         if name == '':
