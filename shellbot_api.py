@@ -43,54 +43,62 @@ class DialogFlowResource(Resource):
         self.rules_persister = kwargs['rules']
         self.cache_persister = kwargs['cache']
 
+    def set_limit(self):
+        parameters = request.get_json()['queryResult']['parameters']
+        values = self.config_persister.get()
+        values.update(parameters)
+        self.config_persister.set(values)
+        if int(parameters['limit']) == 0:
+            phrase = "OK, I won't limit the number of messages I process each time I review your emails."
+        else:
+            phrase = "I've set the email processing limit to {} as you requested.".format(int(values['limit']))
+        return self.define_response(parameters, phrase)
+
+    def set_cache_limit(self):
+        parameters = request.get_json()['queryResult']['parameters']
+        values = self.config_persister.get()
+        duration_amount = parameters['duration']['amount']
+        seconds = duration_amount
+        duration_unit = parameters['duration']['unit']
+        if duration_unit == 's':
+            duration_unit = 'second'
+            seconds = duration_amount
+        elif duration_unit == 'min':
+            duration_unit = 'minute'
+            seconds = duration_amount * 60
+        elif duration_unit == 'h':
+            duration_unit = 'hour'
+            seconds = duration_amount * 3600
+        elif duration_unit == 'day':
+            seconds = duration_amount * 3600 * 24
+        elif duration_unit == 'wk':
+            duration_unit = 'week'
+            seconds = duration_amount * 3600 * 24 * 7
+        elif duration_unit == 'mo':
+            duration_unit = 'month'
+            seconds = duration_amount * 3600 * 30
+        elif duration_unit == 'yr':
+            duration_unit = 'year'
+            seconds = duration_amount * 3600 * 365
+        if duration_amount != 1:
+            duration_unit = duration_unit + "s"
+        values.update({'cache_maxage': seconds})
+        self.config_persister.set(values)
+        if int(duration_amount) == duration_amount:
+            phrase = "OK, I've set the maximum cache age to {} {}.".format(int(duration_amount), duration_unit)
+        else:
+            phrase = "OK, I've set the maximum cache age to {} {}.".format(duration_amount, duration_unit)
+        return self.define_response(parameters, phrase)
+
     def post(self):
-        json_values = request.get_json()['queryResult']['parameters']
         intent_display_name = request.get_json()['queryResult']['intent']['displayName']
         if intent_display_name == "Set limit":
-            values = self.config_persister.get()
-            values.update(json_values)
-            self.config_persister.set(values)
-            if int(json_values['limit']) == 0:
-                phrase = "OK, I won't limit the number of messages I process each time I review your emails."
-            else:
-                phrase = "I've set the email processing limit to {} as you requested.".format(int(values['limit']))
-            result = self.define_response(json_values, phrase)
+            result = self.set_limit()
         elif intent_display_name == "Set cache limit":
-            values = self.config_persister.get()
-            duration_amount = json_values['duration']['amount']
-            seconds = duration_amount
-            duration_unit = json_values['duration']['unit']
-            if duration_unit == 's':
-                duration_unit = 'second'
-                seconds = duration_amount
-            elif duration_unit == 'min':
-                duration_unit = 'minute'
-                seconds = duration_amount * 60
-            elif duration_unit == 'h':
-                duration_unit = 'hour'
-                seconds = duration_amount * 3600
-            elif duration_unit == 'day':
-                seconds = duration_amount * 3600 * 24
-            elif duration_unit == 'wk':
-                duration_unit = 'week'
-                seconds = duration_amount * 3600 * 24 * 7
-            elif duration_unit == 'mo':
-                duration_unit = 'month'
-                seconds = duration_amount * 3600 * 30
-            elif duration_unit == 'yr':
-                duration_unit = 'year'
-                seconds = duration_amount * 3600 * 365
-            if duration_amount != 1:
-                duration_unit = duration_unit + "s"
-            values.update({'cache_maxage': seconds})
-            self.config_persister.set(values)
-            if int(duration_amount) == duration_amount:
-                phrase = "OK, I've set the maximum cache age to {} {}.".format(int(duration_amount), duration_unit)
-            else:
-                phrase = "OK, I've set the maximum cache age to {} {}.".format(duration_amount, duration_unit)
-            result = self.define_response(json_values, phrase)
+            result = self.set_cache_limit()
         else:
-            result = self.define_response(json_values, phrase="The Shellbot API doesn't handle that.")
+            parameters = request.get_json()['queryResult']['parameters']
+            result = self.define_response(parameters, phrase="The Shellbot API doesn't handle that.")
         return jsonify(result)
 
     def define_response(self, values, phrase):
