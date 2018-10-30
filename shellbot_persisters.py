@@ -26,6 +26,8 @@ class DBPersister():
             self.db = db.RulesDB(host, user, passwd, portnum=portnum)
         elif self.name == 'cache':
             self.db = db.CacheDB(host, user, passwd, portnum=portnum)
+        elif self.name == 'log':
+            self.db = db.LogDB(host, user, passwd, portnum=portnum)
         self.uid = uid
 
     def get(self):

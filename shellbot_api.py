@@ -2,10 +2,12 @@ from flask import Flask, request, jsonify
 from flask_restful import Resource, Api
 from json import dumps
 from shellbot_persisters import DBPersister, JsonFilePersister
+from gmail_helper import GmailHelper
 
 def main():
     print """The Shellbot API defines a RESTful interface for interacting
 with Shellbot tools such as Gmail Helper."""
+
 
 class ShellbotAPI():
     def __init__(self, use_db=True):
@@ -17,6 +19,7 @@ class ShellbotAPI():
                                            'cache_maxage': 60 * 60 * 6})
             rules_persister = DBPersister('rules', {})
             cache_persister = DBPersister('cache', {})
+            log_persister = DBPersister('log', {})
         else:
             config_persister = JsonFilePersister('config',
                                                  {'limit': 0,
@@ -29,12 +32,47 @@ class ShellbotAPI():
                          resource_class_kwargs={'persister': rules_persister})
         api.add_resource(PersistentResource, '/cache', '/cache/<name>',
                          resource_class_kwargs={'persister': cache_persister})
+        api.add_resource(CacheQueueResource, '/update_sender_count_cache',
+                         resource_class_kwargs={'log': log_persister,
+                                                'config': config_persister,
+                                                'rules': rules_persister,
+                                                'cache': cache_persister
+                                                  })
         api.add_resource(DialogFlowResource, '/dialog',
                          resource_class_kwargs={'config': config_persister,
                                                 'rules': rules_persister,
                                                 'cache': cache_persister
                                                   })
         self.app = app
+
+
+class CacheQueueResource(Resource):
+    def __init__(self, **kwargs):
+        self.log_persister = kwargs['log']
+        persisters = {}
+        persisters['config'] = DBPersister('config',
+                                                 {'limit': 0,
+                                                  'cache_maxage': 60 * 60 * 6})
+        persisters['rules'] = DBPersister('rules', {})
+        persisters['cache'] = DBPersister('cache',
+                                                {'sorted_domain_counts': [],
+                                                 'sorted_address_counts': []})
+        self.gmail_helper = GmailHelper(persisters)
+
+
+    def post(self):
+        """Log the request payload."""
+        payload = request.get_data(as_text=True) or '(empty payload)'
+        value = {'log_key': payload, 'message': 'Received task with payload: {}'.format(payload)}
+        self.log_persister.set(value)
+        messages = self.gmail_helper.collect_messages_list()
+        i = 1
+        for message in messages:
+            if i < 10:
+                value = {'log_key': str(i), 'message': dumps(message.keys())}
+                self.log_persister.set(value)
+            i = i + 1
+        return 'Printed task payload: {}'.format(payload)
 
 
 class DialogFlowResource(Resource):

@@ -7,6 +7,7 @@ import shellbot_persisters
 
 
 class ShellbotDB():
+    """Base class for databases used to persist data."""
     def __init__(self, hostname, username, password, portnum=3306, dbasename='shellbot'):
         CLOUDSQL_CONNECTION_NAME = os.environ.get('CLOUDSQL_CONNECTION_NAME')
         CLOUDSQL_USER = os.environ.get('CLOUDSQL_USER')
@@ -192,6 +193,30 @@ class CacheDB(ShellbotDB):
     def delete(self, uid=1):
         query = "DELETE FROM shellbot_cache WHERE uid = %s"
         param = (uid,)
+        self.cursor.execute(query, param)
+        self.db.commit()
+
+
+class LogDB(ShellbotDB):
+    def __init__(self, hostname, username, password, portnum=3306, dbasename='shellbot'):
+        ShellbotDB.__init__(self, hostname, username, password, portnum, dbasename)
+        self.open_database()
+
+    def get(self, uid=1):
+        query = "SELECT id, message FROM queue_log WHERE log_key = %s"
+        self.cursor.execute(query, (log_key, ))
+        result = self.cursor.fetchall()
+        return [(i, log_key, m) for i, m in result]
+
+    def set(self, value, uid=1):
+        query = ("INSERT INTO queue_log (log_key, message) " +
+                 "VALUES (%s, %s)")
+        self.cursor.execute(query, (value['log_key'], value['message'], ))
+        self.db.commit()
+
+    def delete(self, uid=1):
+        query = "DELETE FROM queue_log WHERE log_key = %s"
+        param = (log_key,)
         self.cursor.execute(query, param)
         self.db.commit()
 
