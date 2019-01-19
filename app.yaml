@@ -17,6 +17,9 @@ handlers:
 # [END handlers]
 
 env_variables:
-    CLOUDSQL_CONNECTION_NAME: your-connection-name
+    CLOUDSQL_CONNECTION_NAME: nudistrobot:us-central1:shellbot-v1
     CLOUDSQL_USER: root
-    CLOUDSQL_PASSWORD: your-cloudsql-user-password
+    CLOUDSQL_PASSWORD: LEKonmow6Mehrj9w
+    PROJECT_ID: nudistrobot
+    LOCATION_ID: us-central1'
+    QUEUE_ID: message-count-cache-queue

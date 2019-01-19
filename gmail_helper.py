@@ -229,12 +229,6 @@ OK? Let's get started...""")
 class Dialog():
     """The Dialog object defines a sequence of steps that can take actions
     and return values and text within a context.
-
-    This requires using a token in file token.json with a valid
-    token key to establish access to a gmail service.
-
-    Attributes:
-        service (object): the gmail service
     """
 
     context = {}
@@ -305,6 +299,7 @@ def ListMessagesMatchingQuery(service, user_id, query=''):
   try:
     response = service.users().messages().list(userId=user_id,
                                                q=query).execute()
+    # json.dumps(response);
     messages = []
     if 'messages' in response:
       messages.extend(response['messages'])
